@@ -658,20 +658,23 @@ class Clear_Vertex_Colors(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
-		current_selected_obj = bpy.context.selected_objects
-		current_active_obj = bpy.context.active_object
+		selected_obj = context.selected_objects
+		obj_types = {'MESH'}
 
-		for x in current_selected_obj:
-			bpy.ops.object.select_all(action='DESELECT')
-			x.select_set(True)
-			bpy.context.view_layer.objects.active = x
-			if x.type == 'MESH':
-				for color_attribute in reversed(x.data.color_attributes):
-					bpy.ops.geometry.color_attribute_remove()
+		# Grab all color attributes from selected objects of type 'obj_types'
+		objects_color_attributes = [
+			obj.data.color_attributes for obj in selected_obj if obj.type in obj_types]
+		
+		# Extract a set of color attributes
+		color_attributes = set()
+		[color_attributes.add(col_attr) for col_attr in objects_color_attributes]
 
-		for x in current_selected_obj:
-			x.select_set(True)
-		bpy.context.view_layer.objects.active = current_active_obj
+		# Remove Attribute types from color attributes
+		for color_attribute in color_attributes:
+			attributes = reversed(color_attribute.values())
+			
+			for attribute in attributes:
+				color_attribute.remove(attribute)
 
 		return {'FINISHED'}
 
@@ -684,14 +687,14 @@ class Material_To_Viewport(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
-		selected_obj = bpy.context.selected_objects
+		selected_obj = context.selected_objects
 		obj_types = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
 
 		# Grab all material data from selected objects of type 'obj_types'
 		objects_mat_data = [
 			obj.data.materials for obj in selected_obj if obj.type in obj_types]
 
-		# Create a set of unique materials
+		# Extract a set of unique materials
 		materials = set()
 		[[materials.add(m) for m in mats] for mats in objects_mat_data]
 		
@@ -710,31 +713,30 @@ class Random_Viewport_Color(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
-		selected_obj = bpy.context.selected_objects
-		active_obj = bpy.context.active_object
+		selected_obj = context.selected_objects
+		obj_types = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
 
-		for x in selected_obj:
-			bpy.ops.object.select_all(action='DESELECT')
-			x.select_set(True)
-			bpy.context.view_layer.objects.active = x
+		# Grab all material data from selected objects of type 'obj_types'
+		objects_mat_data = [
+			obj.data.materials for obj in selected_obj if obj.type in obj_types]
 
-			if x.type in ['MESH', 'CURVE', 'SURFACE', 'META', 'FONT']:
-				for mat in x.data.materials:
-					random_hue = random.randrange(0, 10, 1)/10
-					random_value = random.randrange(2, 10, 1)/10
-					random_saturation = random.randrange(7, 10, 1)/10
-					color = colorsys.hsv_to_rgb(random_hue, random_saturation, random_value)
-					color4 = (color[0], color[1], color[2], 1)
-					try:
-						mat.diffuse_color = color4
-					except:
-						print("Can\'t change viewport material color")
+		# Extract a set of unique materials
+		materials = set()
+		[[materials.add(m) for m in mats] for mats in objects_mat_data]
+		
+		rand = random.randrange
 
-		# Select again objects
-		for j in selected_obj:
-			j.select_set(True)
+		def rand_hsv():
+			""""Generate a random colour in HSV spectrum, returns a Color"""
+			hue = rand(0, 10) * 0.1
+			saturation = rand(2, 10) * 0.1
+			value = rand(7, 10) * 0.1
+			color = colorsys.hsv_to_rgb(hue, saturation, value)
 
-		bpy.context.view_layer.objects.active = active_obj
+			return (color[0], color[1], color[2], 1)
+
+		# Set a random generated colour to Viewport Shading Color
+		[setattr(mat, 'diffuse_color', rand_hsv()) for mat in materials]
 
 		return {'FINISHED'}
 
@@ -747,28 +749,20 @@ class Clear_Viewport_Color(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
-		selected_obj = bpy.context.selected_objects
-		active_obj = bpy.context.active_object
+		selected_obj = context.selected_objects
+		obj_types = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
 
-		for x in selected_obj:
-			bpy.ops.object.select_all(action='DESELECT')
-			x.select_set(True)
-			bpy.context.view_layer.objects.active = x
+		# Grab all material data from selected objects of type 'obj_types'
+		objects_mat_data = [
+			obj.data.materials for obj in selected_obj if obj.type in obj_types]
 
-			if x.type in ['MESH', 'CURVE', 'SURFACE', 'META', 'FONT']:
-				for mat in x.data.materials:
-					color = colorsys.hsv_to_rgb(0, 0, 0.906)
-					color4 = (color[0], color[1], color[2], 1)
-					try:
-						mat.diffuse_color = color4
-					except:
-						print("Can\'t change viewport material color")
-
-		# Select again objects
-		for j in selected_obj:
-			j.select_set(True)
-
-		bpy.context.view_layer.objects.active = active_obj
+		# Extract a set of unique materials
+		materials = set()
+		[[materials.add(m) for m in mats] for mats in objects_mat_data]
+		
+		# Restore default colour of Viewport Shading Color
+		colour4 = (0.8, 0.8, 0.8, 1)
+		[setattr(mat, 'diffuse_color', colour4) for mat in materials]
 
 		return {'FINISHED'}
 
@@ -781,23 +775,11 @@ class Delete_Unused_Materials(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
-		selected_obj = bpy.context.selected_objects
-		active_obj = bpy.context.active_object
+		selected_obj = context.selected_objects
 
-		# Delete Unused Materials
-		for x in selected_obj:
-			bpy.ops.object.select_all(action='DESELECT')
-			x.select_set(True)
-			bpy.context.view_layer.objects.active = x
-
-			if x.type in ['MESH', 'CURVE', 'SURFACE', 'META', 'FONT']:
-				bpy.ops.object.material_slot_remove_unused()
-
-		# Select again objects
-		for j in selected_obj:
-			j.select_set(True)
-
-		bpy.context.view_layer.objects.active = active_obj
+		bpy.ops.object.material_slot_remove_unused(
+        	{"selected_objects" : selected_obj}
+        )
 
 		return {'FINISHED'}
 
